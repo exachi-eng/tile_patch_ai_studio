@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tile Patch Studio - AI標準アスペクト比対応版</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #18181b; }
+    ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+    .bg-checker {
+      background-image: linear-gradient(45deg, #1f242d 25%, transparent 25%),
+                        linear-gradient(-45deg, #1f242d 25%, transparent 25%),
+                        linear-gradient(45deg, transparent 75%, #1f242d 75%),
+                        linear-gradient(-45deg, transparent 75%, #1f242d 75%);
+      background-size: 16px 16px;
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+      background-color: #12151b;
+    }
+  </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 font-sans min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+
+  <!-- Header -->
+  <header class="border-b border-zinc-800 bg-zinc-900/90 backdrop-blur sticky top-0 z-40 px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center space-x-3">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+        </svg>
+      </div>
+      <div>
+        <h1 class="font-bold text-sm sm:text-base tracking-tight text-white flex items-center gap-2">
+          Tile Patch Studio
+          <span class="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">AI Aspect Safe</span>
+        </h1>
+        <p class="text-xs text-zinc-400 hidden sm:block">AI出力の比率歪みを防ぐ自動アスペクト比補正・局所修正ツール</p>
+      </div>
+    </div>
+
+    <!-- Active Step Breadcrumbs -->
+    <div class="flex items-center gap-1 text-xs">
+      <div id="step-badge-1" class="step-badge px-2.5 py-1 rounded-full font-medium transition-all bg-indigo-600 text-white flex items-center gap-1.5 shadow-sm">
+        <span class="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[10px]">1</span>
+        <span>画像・ガイド</span>
+      </div>
+      <svg class="w-3 h-3 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+      <div id="step-badge-2" class="step-badge px-2.5 py-1 rounded-full font-medium transition-all bg-zinc-800 text-zinc-400 flex items-center gap-1.5">
+        <span class="w-4 h-4 rounded-full bg-zinc-700 flex items-center justify-center text-[10px]">2</span>
+        <span>比率安全切り出し</span>
+      </div>
+      <svg class="w-3 h-3 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+      <div id="step-badge-3" class="step-badge px-2.5 py-1 rounded-full font-medium transition-all bg-zinc-800 text-zinc-400 flex items-center gap-1.5">
+        <span class="w-4 h-4 rounded-full bg-zinc-700 flex items-center justify-center text-[10px]">3</span>
+        <span>再合成・出力</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+
+    <!-- Left Controls Panel -->
+    <aside class="w-full lg:w-96 bg-zinc-900 border-r border-zinc-800 flex flex-col shrink-0 overflow-y-auto max-h-[48vh] lg:max-h-none shadow-xl z-20">
+
+      <!-- Step 1 & 2: Base Image & Guidelines -->
+      <section id="panel-step-1" class="p-4 space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2 text-indigo-400 font-semibold text-sm">
+            <span class="w-5 h-5 rounded-md bg-indigo-500/20 flex items-center justify-center text-xs">1</span>
+            元画像の読み込み
+          </div>
+          <span id="img-meta" class="text-[11px] font-mono text-zinc-400 hidden">0 x 0</span>
+        </div>
+
+        <!-- Upload Dropzone -->
+        <div id="drop-zone" class="border-2 border-dashed border-zinc-700 hover:border-indigo-500/60 rounded-xl p-3 text-center cursor-pointer transition-colors bg-zinc-950/40 hover:bg-indigo-950/10 group">
+          <input type="file" id="file-input" accept="image/*" class="hidden">
+          <div class="flex flex-col items-center justify-center py-1.5 text-zinc-400 group-hover:text-zinc-200">
+            <svg class="w-7 h-7 mb-1 text-zinc-500 group-hover:text-indigo-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+            </svg>
+            <p class="text-xs font-medium">元画像をドラッグ＆ドロップ</p>
+            <p class="text-[10px] text-zinc-500 mt-0.5">またはクリックして選択 (Nano Banana拡大画像を推奨)</p>
+          </div>
+        </div>
+
+        <!-- Drawing Toolbar -->
+        <div id="drawing-tools" class="space-y-3 pt-2 border-t border-zinc-800 opacity-50 pointer-events-none transition-opacity">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              修正箇所の指示線描画
+            </label>
+            <div class="flex items-center gap-1">
+              <button id="btn-undo" title="1手戻す (Ctrl+Z)" class="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 015 5v2m0 0l-4-4m4 4l4-4M3 10l4-4m-4 4l4 4"/></svg>
+              </button>
+              <button id="btn-clear-draw" title="全消去" class="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-rose-400 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Color palette & tool mode -->
+          <div class="flex items-center gap-2">
+            <div class="flex items-center bg-zinc-950 p-1 rounded-lg border border-zinc-800 gap-1 flex-1">
+              <button class="color-btn w-6 h-6 rounded-md bg-red-500 border-2 border-white shadow-sm ring-2 ring-indigo-500/50" data-color="#EF4444" title="レッド"></button>
+              <button class="color-btn w-6 h-6 rounded-md bg-cyan-400 border border-transparent hover:scale-105 transition" data-color="#22D3EE" title="シアン"></button>
+              <button class="color-btn w-6 h-6 rounded-md bg-amber-400 border border-transparent hover:scale-105 transition" data-color="#FBBF24" title="イエロー"></button>
+              <button class="color-btn w-6 h-6 rounded-md bg-white border border-transparent hover:scale-105 transition" data-color="#FFFFFF" title="ホワイト"></button>
+              <button class="color-btn w-6 h-6 rounded-md bg-fuchsia-500 border border-transparent hover:scale-105 transition" data-color="#D946EF" title="マゼンタ"></button>
+            </div>
+
+            <div class="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800">
+              <button id="tool-pen" class="px-2.5 py-1 rounded text-xs font-medium bg-indigo-600 text-white flex items-center gap-1 transition">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                ペン
+              </button>
+              <button id="tool-eraser" class="px-2.5 py-1 rounded text-xs font-medium text-zinc-400 hover:text-white flex items-center gap-1 transition">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11l-8 8-4-4 8-8m5-5l3 3-3 3"/></svg>
+                消しゴム
+              </button>
+            </div>
+          </div>
+
+          <!-- Brush Size Slider -->
+          <div class="space-y-1">
+            <div class="flex justify-between text-[11px] text-zinc-400 font-mono">
+              <span>ブラシサイズ</span>
+              <span id="brush-size-val">6 px</span>
+            </div>
+            <input type="range" id="brush-size" min="1" max="40" value="6" class="w-full accent-indigo-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg appearance-none">
+          </div>
+        </div>
+
+        <!-- Step 2: Crop & Margin Config (Aspect Ratio Safe) -->
+        <div id="crop-config" class="space-y-3 pt-3 border-t border-zinc-800 opacity-50 pointer-events-none transition-opacity">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+              <span class="w-4 h-4 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[10px]">2</span>
+              切り出し範囲と比率制御
+            </span>
+            <span id="crop-mode-badge" class="text-[10px] font-mono text-zinc-400 px-1.5 py-0.5 bg-zinc-800 rounded">Auto Safe-Ratio</span>
+          </div>
+
+          <!-- Mode selector (Free Auto-Safe vs NxN Grid) -->
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <button id="mode-bbox" class="p-2 rounded-lg border border-indigo-500/50 bg-indigo-950/20 text-indigo-200 font-medium text-left flex flex-col gap-0.5">
+              <span class="font-semibold text-white flex items-center gap-1">
+                <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+                フリー輪郭 (標準比率化)
+              </span>
+              <span class="text-[10px] text-zinc-400">線画を収め最寄りの比率に外枠拡張</span>
+            </button>
+            <button id="mode-grid" class="p-2 rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-400 font-medium text-left flex flex-col gap-0.5 hover:border-zinc-700">
+              <span class="font-semibold text-zinc-200 flex items-center gap-1">
+                <svg class="w-3.5 h-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+                N×N 連動グリッド
+              </span>
+              <span class="text-[10px] text-zinc-400">縦横同分割＋比率安全ガード</span>
+            </button>
+          </div>
+
+          <!-- Free BBox Ratio Selector -->
+          <div id="bbox-ratio-controls" class="space-y-1.5 bg-zinc-950 p-2.5 rounded-lg border border-zinc-800">
+            <div class="flex items-center justify-between text-[11px]">
+              <label class="text-zinc-300 font-medium">切り出しターゲット比率:</label>
+              <span id="detected-ratio-tag" class="text-emerald-400 font-mono text-[10px] bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-800/40">自動判定</span>
+            </div>
+            <select id="target-aspect-select" class="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 text-white font-mono text-xs focus:ring-1 focus:ring-indigo-500">
+              <option value="auto">最寄りの標準比率に自動拡張 (推奨)</option>
+              <option value="1:1">正方形 1:1 (Square)</option>
+              <option value="4:3">標準横 4:3</option>
+              <option value="3:4">標準縦 3:4</option>
+              <option value="3:2">写真横 3:2</option>
+              <option value="2:3">写真縦 2:3</option>
+              <option value="16:9">ワイド横 16:9</option>
+              <option value="9:16">ワイド縦 9:16</option>
+            </select>
+          </div>
+
+          <!-- NxN Grid Controls (hidden by default) -->
+          <div id="grid-controls" class="hidden space-y-2.5 bg-zinc-950 p-2.5 rounded-lg border border-zinc-800 text-xs">
+            <div class="flex items-center justify-between">
+              <label class="text-zinc-300 font-medium">連動分割数 (N×N):</label>
+              <span id="grid-div-label" class="font-mono text-indigo-300 text-[11px]">4 × 4 (16分割)</span>
+            </div>
+            <div class="grid grid-cols-4 gap-1.5 text-[11px] font-mono">
+              <button class="grid-n-btn py-1 rounded bg-zinc-900 border border-zinc-700 text-zinc-300 hover:border-zinc-500" data-n="2">2×2</button>
+              <button class="grid-n-btn py-1 rounded bg-zinc-900 border border-zinc-700 text-zinc-300 hover:border-zinc-500" data-n="3">3×3</button>
+              <button class="grid-n-btn py-1 rounded bg-indigo-600 border border-indigo-400 text-white font-semibold" data-n="4">4×4</button>
+              <button class="grid-n-btn py-1 rounded bg-zinc-900 border border-zinc-700 text-zinc-300 hover:border-zinc-500" data-n="6">6×6</button>
+            </div>
+
+            <!-- Auto-correct checkbox for grid mode -->
+            <label class="flex items-start gap-2 pt-1 border-t border-zinc-800/80 cursor-pointer">
+              <input type="checkbox" id="chk-grid-autocorrect" checked class="mt-0.5 rounded border-zinc-700 bg-zinc-900 text-indigo-600 focus:ring-0">
+              <span class="text-[11px] text-zinc-300 leading-tight">
+                グリッド領域が非標準比率の場合、最寄り標準比率へ自動外側補正する
+              </span>
+            </label>
+          </div>
+
+          <!-- Margin slider -->
+          <div class="space-y-1">
+            <div class="flex justify-between text-[11px] text-zinc-400">
+              <span>周囲マージン (AI文脈保持)</span>
+              <span id="margin-val" class="font-mono text-indigo-300">20 %</span>
+            </div>
+            <input type="range" id="margin-slider" min="0" max="50" value="20" class="w-full accent-indigo-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg appearance-none">
+          </div>
+
+          <!-- Crop details & Aspect Ratio Status Banner -->
+          <div id="crop-status-box" class="p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 space-y-1.5 text-xs">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] text-zinc-400 font-medium">切り出し比率ステータス:</span>
+              <span id="ratio-badge" class="font-mono text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">未検出</span>
+            </div>
+            <div class="flex items-center justify-between text-[11px] font-mono text-zinc-300">
+              <span class="text-zinc-500">切り出し解像度:</span>
+              <span id="crop-stats-dim" class="font-semibold text-white">線を描画してください</span>
+            </div>
+            <!-- Warning Alert (shown only when non-standard ratio detected) -->
+            <div id="ratio-warning-box" class="hidden p-2 rounded bg-amber-950/40 border border-amber-600/40 text-[10px] text-amber-200 flex items-start gap-1.5">
+              <svg class="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+              <span><strong>非標準比率です:</strong> AI生成時に歪み・ズレが生じる危険性があるため切り出しを停止しています。自動補正をONにするか標準比率を選択してください。</span>
+            </div>
+          </div>
+
+          <!-- Download Action Buttons -->
+          <div class="space-y-2 pt-1">
+            <button id="btn-download-with-guide" class="w-full py-2.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed font-semibold text-xs text-white transition flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20 active:scale-[0.98]">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              ① 指示線入りで切り出しダウンロード
+            </button>
+            <button id="btn-download-clean" class="w-full py-1.5 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-300 hover:text-white text-xs font-medium transition flex items-center justify-center gap-2">
+              <svg class="w-3.5 h-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+              指示線なし (元画像のみ) でダウンロード
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 3: Re-blend & Super-Sampling Export -->
+      <section id="panel-step-3" class="p-4 space-y-4 border-t border-zinc-800 bg-zinc-900/60">
+        <div class="flex items-center gap-2 text-indigo-400 font-semibold text-sm">
+          <span class="w-5 h-5 rounded-md bg-indigo-500/20 flex items-center justify-center text-xs">3</span>
+          修正後タイルの再合成
+        </div>
+
+        <!-- Modified Tile Dropzone -->
+        <div id="drop-zone-patch" class="border-2 border-dashed border-indigo-500/40 hover:border-indigo-400 rounded-xl p-3 text-center cursor-pointer transition-colors bg-indigo-950/20 hover:bg-indigo-950/30 group">
+          <input type="file" id="patch-file-input" accept="image/*" class="hidden">
+          <div class="flex flex-col items-center justify-center py-1 text-zinc-300">
+            <svg class="w-6 h-6 mb-1 text-indigo-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <p class="text-xs font-semibold text-white">AI生成後の画像をドロップ</p>
+            <p class="text-[10px] text-indigo-300/80">解像度が異なっても比率が一致していれば自動リサンプリング配置</p>
+          </div>
+        </div>
+
+        <!-- Feathering & Blending Controls -->
+        <div id="blend-controls" class="space-y-3 opacity-40 pointer-events-none transition-opacity">
+          <!-- Patch safety status note -->
+          <div id="patch-safety-note" class="p-2 rounded bg-zinc-950 border border-zinc-800/80 text-[10px] text-zinc-400 font-mono">
+            タイルの読み込みを待機中
+          </div>
+
+          <!-- Feather slider -->
+          <div class="space-y-1">
+            <div class="flex justify-between text-[11px] text-zinc-400">
+              <span class="font-medium text-zinc-300">境界ぼかし (Feathering)</span>
+              <span id="feather-val" class="font-mono text-indigo-300">18 px</span>
+            </div>
+            <input type="range" id="feather-slider" min="0" max="60" value="18" class="w-full accent-indigo-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg appearance-none">
+            <p class="text-[10px] text-zinc-500">タイルの外枠を滑らかにアルファブレンドし継ぎ目を消去</p>
+          </div>
+
+          <!-- Downsample / Super-sampling options -->
+          <div class="space-y-1.5 pt-2 border-t border-zinc-800/80">
+            <label class="text-[11px] font-semibold text-zinc-300 block">出力解像度 (オーバーサンプリング縮小)</label>
+            <div class="grid grid-cols-3 gap-1.5 text-xs font-mono">
+              <button class="resize-opt-btn py-1.5 px-2 rounded-lg border border-indigo-500 bg-indigo-950/30 text-indigo-300 text-center font-medium" data-scale="1">
+                100%
+                <span class="block text-[9px] font-sans text-zinc-400">等倍</span>
+              </button>
+              <button class="resize-opt-btn py-1.5 px-2 rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-400 text-center font-medium hover:border-zinc-700" data-scale="0.5">
+                50%
+                <span class="block text-[9px] font-sans text-emerald-400">推奨(半減)</span>
+              </button>
+              <button class="resize-opt-btn py-1.5 px-2 rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-400 text-center font-medium hover:border-zinc-700" data-scale="0.25">
+                25%
+                <span class="block text-[9px] font-sans text-zinc-400">1/4</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Export Button -->
+          <button id="btn-export-composite" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 font-bold text-xs text-white shadow-lg shadow-emerald-900/30 transition flex items-center justify-center gap-2 active:scale-[0.98]">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            完成画像をPNG書き出し
+          </button>
+        </div>
+      </section>
+    </aside>
+
+    <!-- Right: Interactive Canvas Area -->
+    <section class="flex-1 flex flex-col relative bg-zinc-950 overflow-hidden">
+
+      <!-- Viewport Control Bar -->
+      <div class="h-10 border-b border-zinc-800/80 bg-zinc-900/50 px-4 flex items-center justify-between z-10">
+        <div class="flex items-center gap-3 text-xs text-zinc-400">
+          <span class="flex items-center gap-1.5 font-medium">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            キャンバス
+          </span>
+          <span id="canvas-zoom-text" class="font-mono text-[11px] bg-zinc-800/80 px-2 py-0.5 rounded">100%</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <!-- Compare Toggle Button -->
+          <button id="btn-compare-hold" class="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-300 disabled:opacity-30 disabled:pointer-events-none transition flex items-center gap-1" disabled>
+            <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            <span>長押しで元画像と比較</span>
+          </button>
+
+          <!-- Fit to screen -->
+          <button id="btn-fit-screen" class="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition" title="画面に合わせる">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Canvas Stage Container -->
+      <div id="viewport-container" class="flex-1 overflow-auto bg-checker relative flex items-center justify-center p-6 select-none">
+        
+        <!-- Empty placeholder -->
+        <div id="empty-state" class="text-center p-8 max-w-sm">
+          <div class="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 mx-auto flex items-center justify-center text-zinc-500 mb-4 shadow-xl">
+            <svg class="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+          </div>
+          <h3 class="text-sm font-semibold text-white mb-1">作業する元画像を読み込んでください</h3>
+          <p class="text-xs text-zinc-400">Nano Banana等で拡大した画像を左のドロップゾーンから追加します。</p>
+        </div>
+
+        <!-- Canvas Wrapper Layer -->
+        <div id="canvas-wrapper" class="relative hidden shadow-2xl rounded-lg overflow-hidden border border-zinc-800">
+          <canvas id="base-canvas" class="block"></canvas>
+          <canvas id="patch-canvas" class="absolute inset-0 pointer-events-none"></canvas>
+          <canvas id="draw-canvas" class="absolute inset-0 cursor-crosshair"></canvas>
+          <canvas id="ui-canvas" class="absolute inset-0 pointer-events-none"></canvas>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Notification Toast Modal -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-16 opacity-0 transition-all duration-300 pointer-events-none">
+    <div class="bg-zinc-900 border border-zinc-700 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-xs max-w-md">
+      <div id="toast-icon" class="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+      </div>
+      <p id="toast-msg" class="font-medium leading-relaxed"></p>
+    </div>
+  </div>
+
+  <script>
+    // Standard aspect ratio specifications
+    const STANDARD_RATIOS = [
+      { id: '1:1',  label: '1:1',  ratio: 1.0,    w: 1,  h: 1  },
+      { id: '4:3',  label: '4:3',  ratio: 4/3,    w: 4,  h: 3  },
+      { id: '3:4',  label: '3:4',  ratio: 3/4,    w: 3,  h: 4  },
+      { id: '3:2',  label: '3:2',  ratio: 3/2,    w: 3,  h: 2  },
+      { id: '2:3',  label: '2:3',  ratio: 2/3,    w: 2,  h: 3  },
+      { id: '16:9', label: '16:9', ratio: 16/9,   w: 16, h: 9  },
+      { id: '9:16', label: '9:16', ratio: 9/16,   w: 9,  h: 16 }
+    ];
+
+    // Tolerance range for recognizing an aspect ratio as standard (2.5%)
+    const RATIO_TOLERANCE = 0.025;
+
+    // Application state
+    const state = {
+      baseImg: null,
+      patchImg: null,
+      scaleRatio: 1.0,
+      currentColor: '#EF4444',
+      brushSize: 6,
+      currentTool: 'pen',
+      cropMode: 'bbox',              // 'bbox' | 'grid'
+      selectedTargetRatio: 'auto',   // 'auto' or '1:1', '4:3', etc.
+      gridDivN: 4,                   // N for N x N symmetrical grid
+      gridAutoCorrect: true,         // automatically correct to standard ratio in grid mode
+      marginPercent: 20,
+      featherRadius: 18,
+      exportScale: 1.0,
+      
+      // Detected & fitted bounding rectangle { x, y, w, h }
+      cropRect: null,
+      isAspectStandard: false,
+      detectedRatioMeta: null,
+      
+      drawHistory: []
+    };
+
+    // Canvas DOM Elements
+    const baseCanvas = document.getElementById('base-canvas');
+    const patchCanvas = document.getElementById('patch-canvas');
+    const drawCanvas = document.getElementById('draw-canvas');
+    const uiCanvas = document.getElementById('ui-canvas');
+
+    const baseCtx = baseCanvas.getContext('2d');
+    const patchCtx = patchCanvas.getContext('2d');
+    const drawCtx = drawCanvas.getContext('2d');
+    const uiCtx = uiCanvas.getContext('2d');
+
+    const canvasWrapper = document.getElementById('canvas-wrapper');
+    const emptyState = document.getElementById('empty-state');
+    const viewportContainer = document.getElementById('viewport-container');
+
+    // Toast notification function
+    function showToast(message, type = 'info') {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toast-msg');
+      const toastIcon = document.getElementById('toast-icon');
+      
+      toastMsg.textContent = message;
+      if (type === 'success') {
+        toastIcon.className = 'w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0';
+      } else if (type === 'warning') {
+        toastIcon.className = 'w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0';
+      } else {
+        toastIcon.className = 'w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0';
+      }
+
+      toast.classList.remove('translate-y-16', 'opacity-0');
+      setTimeout(() => {
+        toast.classList.add('translate-y-16', 'opacity-0');
+      }, 3400);
+    }
+
+    // Check if a given width and height conform to any standard aspect ratio
+    function checkStandardRatio(w, h, tolerance = RATIO_TOLERANCE) {
+      if (!w || !h || w <= 0 || h <= 0) return null;
+      const currentRatio = w / h;
+      for (const std of STANDARD_RATIOS) {
+        const diff = Math.abs(currentRatio - std.ratio) / std.ratio;
+        if (diff <= tolerance) {
+          return { ...std, actualRatio: currentRatio, deviationPercent: (diff * 100).toFixed(1) };
+        }
+      }
+      return null;
+    }
+
+    // Find closest standard ratio by logarithmic distance
+    function findClosestStandardRatio(w, h) {
+      const currentRatio = w / h;
+      let closest = STANDARD_RATIOS[0];
+      let minDistance = Math.abs(Math.log(currentRatio / closest.ratio));
+
+      for (let i = 1; i < STANDARD_RATIOS.length; i++) {
+        const dist = Math.abs(Math.log(currentRatio / STANDARD_RATIOS[i].ratio));
+        if (dist < minDistance) {
+          minDistance = dist;
+          closest = STANDARD_RATIOS[i];
+        }
+      }
+      return closest;
+    }
+
+    // Expand bounding box symmetrically to match target aspect ratio without cutting strokes
+    function expandToAspectRatio(rawX, rawY, rawW, rawH, targetRatioVal, maxImgW, maxImgH) {
+      let currentRatio = rawW / rawH;
+      let newW = rawW;
+      let newH = rawH;
+
+      if (currentRatio < targetRatioVal) {
+        // Too narrow -> expand width
+        newW = Math.round(rawH * targetRatioVal);
+        newH = rawH;
+      } else {
+        // Too short -> expand height
+        newW = rawW;
+        newH = Math.round(rawW / targetRatioVal);
+      }
+
+      // Check if expanded dimension exceeds canvas limits
+      if (newW > maxImgW || newH > maxImgH) {
+        if (newW / maxImgW > newH / maxImgH) {
+          newW = maxImgW;
+          newH = Math.round(newW / targetRatioVal);
+        } else {
+          newH = maxImgH;
+          newW = Math.round(newH * targetRatioVal);
+        }
+      }
+
+      // Center expansion around the raw bounding box center
+      const centerX = rawX + rawW / 2;
+      const centerY = rawY + rawH / 2;
+      let newX = Math.round(centerX - newW / 2);
+      let newY = Math.round(centerY - newH / 2);
+
+      // Clamp within image bounds while preserving aspect ratio dimensions
+      if (newX < 0) newX = 0;
+      if (newY < 0) newY = 0;
+      if (newX + newW > maxImgW) newX = maxImgW - newW;
+      if (newY + newH > maxImgH) newY = maxImgH - newH;
+
+      return {
+        x: Math.max(0, newX),
+        y: Math.max(0, newY),
+        w: Math.min(newW, maxImgW),
+        h: Math.min(newH, maxImgH)
+      };
+    }
+
+    // Image Upload Handling
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) handleBaseImageFile(e.target.files[0]);
+    });
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('border-indigo-500', 'bg-indigo-950/20');
+    });
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('border-indigo-500', 'bg-indigo-950/20');
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('border-indigo-500', 'bg-indigo-950/20');
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handleBaseImageFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    function handleBaseImageFile(file) {
+      if (!file.type.startsWith('image/')) {
+        showToast('画像ファイルを選択してください', 'warning');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          state.baseImg = img;
+          state.patchImg = null;
+          state.drawHistory = [];
+          initCanvasSize(img.width, img.height);
+          baseCtx.drawImage(img, 0, 0);
+
+          document.getElementById('img-meta').textContent = `${img.width} × ${img.height} px`;
+          document.getElementById('img-meta').classList.remove('hidden');
+          document.getElementById('drawing-tools').classList.remove('opacity-50', 'pointer-events-none');
+          document.getElementById('crop-config').classList.remove('opacity-50', 'pointer-events-none');
+          document.getElementById('btn-compare-hold').disabled = true;
+
+          emptyState.classList.add('hidden');
+          canvasWrapper.classList.remove('hidden');
+
+          fitToScreen();
+          saveDrawState();
+          showToast(`画像を読み込みました (${img.width}×${img.height})`, 'success');
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function initCanvasSize(w, h) {
+      [baseCanvas, patchCanvas, drawCanvas, uiCanvas].forEach(c => {
+        c.width = w;
+        c.height = h;
+      });
+      patchCtx.clearRect(0, 0, w, h);
+      drawCtx.clearRect(0, 0, w, h);
+      uiCtx.clearRect(0, 0, w, h);
+    }
+
+    function fitToScreen() {
+      if (!state.baseImg) return;
+      const margin = 60;
+      const availW = viewportContainer.clientWidth - margin;
+      const availH = viewportContainer.clientHeight - margin;
+      const scaleW = availW / state.baseImg.width;
+      const scaleH = availH / state.baseImg.height;
+      const fitRatio = Math.min(1.0, scaleW, scaleH);
+      applyZoom(fitRatio);
+    }
+
+    function applyZoom(ratio) {
+      state.scaleRatio = Math.max(0.05, Math.min(3.0, ratio));
+      if (state.baseImg) {
+        const displayW = Math.round(state.baseImg.width * state.scaleRatio);
+        const displayH = Math.round(state.baseImg.height * state.scaleRatio);
+        canvasWrapper.style.width = displayW + 'px';
+        canvasWrapper.style.height = displayH + 'px';
+        [baseCanvas, patchCanvas, drawCanvas, uiCanvas].forEach(c => {
+          c.style.width = displayW + 'px';
+          c.style.height = displayH + 'px';
+        });
+      }
+      document.getElementById('canvas-zoom-text').textContent = `${Math.round(state.scaleRatio * 100)}%`;
+    }
+
+    document.getElementById('btn-fit-screen').addEventListener('click', fitToScreen);
+
+    // Drawing Logic
+    let isDrawing = false;
+    let lastX = 0, lastY = 0;
+
+    function getCanvasCoords(e) {
+      const rect = drawCanvas.getBoundingClientRect();
+      const clientX = e.clientX ?? (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+      const clientY = e.clientY ?? (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+      const x = (clientX - rect.left) * (drawCanvas.width / rect.width);
+      const y = (clientY - rect.top) * (drawCanvas.height / rect.height);
+      return { x, y };
+    }
+
+    function startDraw(e) {
+      if (!state.baseImg) return;
+      isDrawing = true;
+      const { x, y } = getCanvasCoords(e);
+      lastX = x;
+      lastY = y;
+      drawStroke(x, y, true);
+    }
+
+    function moveDraw(e) {
+      if (!isDrawing) return;
+      e.preventDefault();
+      const { x, y } = getCanvasCoords(e);
+      drawStroke(x, y, false);
+      lastX = x;
+      lastY = y;
+    }
+
+    function endDraw() {
+      if (!isDrawing) return;
+      isDrawing = false;
+      saveDrawState();
+      recalculateCropBoundingBox();
+    }
+
+    function drawStroke(x, y, isStart) {
+      drawCtx.save();
+      drawCtx.lineCap = 'round';
+      drawCtx.lineJoin = 'round';
+      drawCtx.lineWidth = state.brushSize;
+
+      if (state.currentTool === 'eraser') {
+        drawCtx.globalCompositeOperation = 'destination-out';
+      } else {
+        drawCtx.globalCompositeOperation = 'source-over';
+        drawCtx.strokeStyle = state.currentColor;
+        drawCtx.shadowColor = state.currentColor;
+        drawCtx.shadowBlur = 3;
+      }
+
+      drawCtx.beginPath();
+      if (isStart) {
+        drawCtx.moveTo(x - 0.5, y);
+        drawCtx.lineTo(x, y);
+      } else {
+        drawCtx.moveTo(lastX, lastY);
+        drawCtx.lineTo(x, y);
+      }
+      drawCtx.stroke();
+      drawCtx.restore();
+    }
+
+    drawCanvas.addEventListener('mousedown', startDraw);
+    window.addEventListener('mousemove', moveDraw);
+    window.addEventListener('mouseup', endDraw);
+
+    drawCanvas.addEventListener('touchstart', startDraw, { passive: false });
+    window.addEventListener('touchmove', moveDraw, { passive: false });
+    window.addEventListener('touchend', endDraw);
+
+    function saveDrawState() {
+      if (!state.baseImg) return;
+      const imgData = drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height);
+      state.drawHistory.push(imgData);
+      if (state.drawHistory.length > 20) state.drawHistory.shift();
+    }
+
+    document.getElementById('btn-undo').addEventListener('click', () => {
+      if (state.drawHistory.length > 1) {
+        state.drawHistory.pop();
+        const prevState = state.drawHistory[state.drawHistory.length - 1];
+        drawCtx.putImageData(prevState, 0, 0);
+        recalculateCropBoundingBox();
+        showToast('描画を1手戻しました');
+      } else if (state.drawHistory.length === 1) {
+        drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+        state.drawHistory = [];
+        saveDrawState();
+        recalculateCropBoundingBox();
+      }
+    });
+
+    document.getElementById('btn-clear-draw').addEventListener('click', () => {
+      if (!state.baseImg) return;
+      drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+      saveDrawState();
+      recalculateCropBoundingBox();
+      showToast('ガイド線をクリアしました');
+    });
+
+    // Color and Tool settings
+    document.querySelectorAll('.color-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('ring-2', 'ring-indigo-500/50', 'border-white'));
+        btn.classList.add('ring-2', 'ring-indigo-500/50', 'border-white');
+        state.currentColor = btn.dataset.color;
+        setTool('pen');
+      });
+    });
+
+    function setTool(tool) {
+      state.currentTool = tool;
+      const penBtn = document.getElementById('tool-pen');
+      const eraserBtn = document.getElementById('tool-eraser');
+      if (tool === 'pen') {
+        penBtn.className = 'px-2.5 py-1 rounded text-xs font-medium bg-indigo-600 text-white flex items-center gap-1 transition';
+        eraserBtn.className = 'px-2.5 py-1 rounded text-xs font-medium text-zinc-400 hover:text-white flex items-center gap-1 transition';
+      } else {
+        eraserBtn.className = 'px-2.5 py-1 rounded text-xs font-medium bg-indigo-600 text-white flex items-center gap-1 transition';
+        penBtn.className = 'px-2.5 py-1 rounded text-xs font-medium text-zinc-400 hover:text-white flex items-center gap-1 transition';
+      }
+    }
+
+    document.getElementById('tool-pen').addEventListener('click', () => setTool('pen'));
+    document.getElementById('tool-eraser').addEventListener('click', () => setTool('eraser'));
+
+    document.getElementById('brush-size').addEventListener('input', (e) => {
+      state.brushSize = parseInt(e.target.value);
+      document.getElementById('brush-size-val').textContent = `${state.brushSize} px`;
+    });
+
+    // Bounding Box Calculation with Strict Aspect Ratio Alignment
+    function recalculateCropBoundingBox() {
+      if (!state.baseImg) return;
+      const w = drawCanvas.width;
+      const h = drawCanvas.height;
+      const imgData = drawCtx.getImageData(0, 0, w, h);
+      const data = imgData.data;
+
+      let minX = w, minY = h, maxX = -1, maxY = -1;
+      let hasPixels = false;
+
+      for (let y = 0; y < h; y += 2) {
+        for (let x = 0; x < w; x += 2) {
+          const idx = (y * w + x) * 4 + 3;
+          if (data[idx] > 10) {
+            hasPixels = true;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      const statsEl = document.getElementById('crop-stats-dim');
+      const ratioBadge = document.getElementById('ratio-badge');
+      const warningBox = document.getElementById('ratio-warning-box');
+      const btnDownloadGuide = document.getElementById('btn-download-with-guide');
+      const btnDownloadClean = document.getElementById('btn-download-clean');
+      const detectedTag = document.getElementById('detected-ratio-tag');
+
+      if (!hasPixels) {
+        state.cropRect = null;
+        state.isAspectStandard = false;
+        state.detectedRatioMeta = null;
+        statsEl.textContent = '線を描画してください';
+        ratioBadge.className = 'font-mono text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700';
+        ratioBadge.textContent = '未検出';
+        warningBox.classList.add('hidden');
+        btnDownloadGuide.disabled = true;
+        btnDownloadClean.disabled = true;
+        detectedTag.textContent = '自動判定';
+        renderOverlayUI();
+        return;
+      }
+
+      let rawW = Math.max(8, maxX - minX);
+      let rawH = Math.max(8, maxY - minY);
+
+      if (state.cropMode === 'bbox') {
+        // Mode 1: Free BBox with Standard Aspect Ratio Extension
+        const marginPx = Math.round(Math.max(rawW, rawH) * (state.marginPercent / 100));
+        let mx = Math.max(0, minX - marginPx);
+        let my = Math.max(0, minY - marginPx);
+        let mw = Math.min(w - mx, rawW + marginPx * 2);
+        let mh = Math.min(h - my, rawH + marginPx * 2);
+
+        let targetRatioObj = null;
+        if (state.selectedTargetRatio === 'auto') {
+          targetRatioObj = findClosestStandardRatio(mw, mh);
+          detectedTag.textContent = `最寄り: ${targetRatioObj.label}`;
+        } else {
+          targetRatioObj = STANDARD_RATIOS.find(r => r.id === state.selectedTargetRatio) || STANDARD_RATIOS[0];
+          detectedTag.textContent = `固定: ${targetRatioObj.label}`;
+        }
+
+        // Expand symmetrically to match the desired standard ratio
+        const finalRect = expandToAspectRatio(mx, my, mw, mh, targetRatioObj.ratio, w, h);
+        state.cropRect = finalRect;
+        state.detectedRatioMeta = targetRatioObj;
+        state.isAspectStandard = true;
+
+      } else {
+        // Mode 2: N x N Symmetrical Grid Snap
+        const n = state.gridDivN;
+        const cellW = w / n;
+        const cellH = h / n;
+
+        const startCol = Math.floor(minX / cellW);
+        const endCol = Math.floor(maxX / cellW);
+        const startRow = Math.floor(minY / cellH);
+        const endRow = Math.floor(maxY / cellH);
+
+        let gx = startCol * cellW;
+        let gy = startRow * cellH;
+        let gw = (endCol - startCol + 1) * cellW;
+        let gh = (endRow - startRow + 1) * cellH;
+
+        // Add margin
+        const marginPx = Math.round(Math.max(gw, gh) * (state.marginPercent / 100));
+        let cx = Math.max(0, gx - marginPx);
+        let cy = Math.max(0, gy - marginPx);
+        let cw = Math.min(w - cx, gw + marginPx * 2);
+        let ch = Math.min(h - cy, gh + marginPx * 2);
+
+        // Check if current grid crop complies with standard ratios
+        const stdCheck = checkStandardRatio(cw, ch);
+
+        if (stdCheck) {
+          state.cropRect = { x: Math.round(cx), y: Math.round(cy), w: Math.round(cw), h: Math.round(ch) };
+          state.detectedRatioMeta = stdCheck;
+          state.isAspectStandard = true;
+        } else if (state.gridAutoCorrect) {
+          // Auto-correct to closest standard ratio
+          const closestStd = findClosestStandardRatio(cw, ch);
+          const finalRect = expandToAspectRatio(cx, cy, cw, ch, closestStd.ratio, w, h);
+          state.cropRect = finalRect;
+          state.detectedRatioMeta = closestStd;
+          state.isAspectStandard = true;
+        } else {
+          // Non-standard aspect ratio detected and auto-correct is disabled
+          state.cropRect = { x: Math.round(cx), y: Math.round(cy), w: Math.round(cw), h: Math.round(ch) };
+          state.detectedRatioMeta = { label: `${(cw / ch).toFixed(2)}:1 (非標準)` };
+          state.isAspectStandard = false;
+        }
+      }
+
+      // Update Ratio Status UI
+      const rect = state.cropRect;
+      const actualRatio = (rect.w / rect.h).toFixed(2);
+      statsEl.textContent = `${rect.w} × ${rect.h} px (X:${rect.x}, Y:${rect.y})`;
+
+      if (state.isAspectStandard) {
+        ratioBadge.className = 'font-mono text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-500/40 flex items-center gap-1';
+        ratioBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>${state.detectedRatioMeta.label} (AI適合)`;
+        warningBox.classList.add('hidden');
+        btnDownloadGuide.disabled = false;
+        btnDownloadClean.disabled = false;
+      } else {
+        ratioBadge.className = 'font-mono text-[10px] px-2 py-0.5 rounded-full bg-amber-950/70 text-amber-300 border border-amber-500/50 flex items-center gap-1';
+        ratioBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>${actualRatio}:1 (非標準・危険)`;
+        warningBox.classList.remove('hidden');
+        btnDownloadGuide.disabled = true;
+        btnDownloadClean.disabled = true;
+      }
+
+      renderOverlayUI();
+    }
+
+    // Render Canvas Overlay Guidelines, Bounding Box and Aspect Ratio Badges
+    function renderOverlayUI() {
+      if (!state.baseImg) return;
+      const w = uiCanvas.width;
+      const h = uiCanvas.height;
+      uiCtx.clearRect(0, 0, w, h);
+
+      // If Grid Mode is active, draw symmetrical N x N grid lines
+      if (state.cropMode === 'grid') {
+        uiCtx.save();
+        uiCtx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+        uiCtx.lineWidth = 1;
+        const n = state.gridDivN;
+        const cellW = w / n;
+        const cellH = h / n;
+
+        for (let c = 1; c < n; c++) {
+          uiCtx.beginPath();
+          uiCtx.moveTo(c * cellW, 0);
+          uiCtx.lineTo(c * cellW, h);
+          uiCtx.stroke();
+        }
+        for (let r = 1; r < n; r++) {
+          uiCtx.beginPath();
+          uiCtx.moveTo(0, r * cellH);
+          uiCtx.lineTo(w, r * cellH);
+          uiCtx.stroke();
+        }
+        uiCtx.restore();
+      }
+
+      // Draw active crop box with ratio status styling
+      if (state.cropRect) {
+        const { x, y, w: rw, h: rh } = state.cropRect;
+        uiCtx.save();
+
+        // Darken backdrop outside crop area
+        uiCtx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        uiCtx.fillRect(0, 0, w, y);
+        uiCtx.fillRect(0, y + rh, w, h - (y + rh));
+        uiCtx.fillRect(0, y, x, rh);
+        uiCtx.fillRect(x + rw, y, w - (x + rw), rh);
+
+        // Dashed bounding border
+        const isSafe = state.isAspectStandard;
+        uiCtx.strokeStyle = isSafe ? '#10B981' : '#F59E0B';
+        uiCtx.lineWidth = 2.5;
+        uiCtx.setLineDash([8, 6]);
+        uiCtx.strokeRect(x, y, rw, rh);
+
+        // Corner indicator handles
+        uiCtx.fillStyle = isSafe ? '#34D399' : '#FBBF24';
+        const handleSize = 6;
+        uiCtx.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize);
+        uiCtx.fillRect(x + rw - handleSize/2, y - handleSize/2, handleSize, handleSize);
+        uiCtx.fillRect(x - handleSize/2, y + rh - handleSize/2, handleSize, handleSize);
+        uiCtx.fillRect(x + rw - handleSize/2, y + rh - handleSize/2, handleSize, handleSize);
+
+        // Tag label
+        uiCtx.font = '12px JetBrains Mono, sans-serif';
+        const label = isSafe 
+          ? `[SAFE ${state.detectedRatioMeta.label}] ${rw}x${rh}` 
+          : `[! NON-STD RATIO] ${rw}x${rh}`;
+        const textWidth = uiCtx.measureText(label).width;
+        uiCtx.fillStyle = isSafe ? '#059669' : '#D97706';
+        uiCtx.fillRect(x, Math.max(0, y - 22), textWidth + 12, 22);
+        uiCtx.fillStyle = '#FFFFFF';
+        uiCtx.fillText(label, x + 6, Math.max(14, y - 6));
+
+        uiCtx.restore();
+      }
+    }
+
+    // Margin & Mode UI Event Listeners
+    const marginSlider = document.getElementById('margin-slider');
+    marginSlider.addEventListener('input', (e) => {
+      state.marginPercent = parseInt(e.target.value);
+      document.getElementById('margin-val').textContent = `${state.marginPercent} %`;
+      recalculateCropBoundingBox();
+    });
+
+    const modeBboxBtn = document.getElementById('mode-bbox');
+    const modeGridBtn = document.getElementById('mode-grid');
+    const bboxRatioControls = document.getElementById('bbox-ratio-controls');
+    const gridControls = document.getElementById('grid-controls');
+
+    modeBboxBtn.addEventListener('click', () => {
+      state.cropMode = 'bbox';
+      modeBboxBtn.className = 'p-2 rounded-lg border border-indigo-500/50 bg-indigo-950/20 text-indigo-200 font-medium text-left flex flex-col gap-0.5';
+      modeGridBtn.className = 'p-2 rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-400 font-medium text-left flex flex-col gap-0.5 hover:border-zinc-700';
+      bboxRatioControls.classList.remove('hidden');
+      gridControls.classList.add('hidden');
+      document.getElementById('crop-mode-badge').textContent = 'Auto Safe-Ratio';
+      recalculateCropBoundingBox();
+    });
+
+    modeGridBtn.addEventListener('click', () => {
+      state.cropMode = 'grid';
+      modeGridBtn.className = 'p-2 rounded-lg border border-indigo-500/50 bg-indigo-950/20 text-indigo-200 font-medium text-left flex flex-col gap-0.5';
+      modeBboxBtn.className = 'p-2 rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-400 font-medium text-left flex flex-col gap-0.5 hover:border-zinc-700';
+      bboxRatioControls.classList.add('hidden');
+      gridControls.classList.remove('hidden');
+      document.getElementById('crop-mode-badge').textContent = `${state.gridDivN}×${state.gridDivN} Safe Grid`;
+      recalculateCropBoundingBox();
+    });
+
+    // Ratio selector listener
+    document.getElementById('target-aspect-select').addEventListener('change', (e) => {
+      state.selectedTargetRatio = e.target.value;
+      recalculateCropBoundingBox();
+    });
+
+    // Grid N x N buttons listener
+    document.querySelectorAll('.grid-n-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.grid-n-btn').forEach(b => {
+          b.className = 'grid-n-btn py-1 rounded bg-zinc-900 border border-zinc-700 text-zinc-300 hover:border-zinc-500';
+        });
+        btn.className = 'grid-n-btn py-1 rounded bg-indigo-600 border border-indigo-400 text-white font-semibold';
+        state.gridDivN = parseInt(btn.dataset.n);
+        document.getElementById('grid-div-label').textContent = `${state.gridDivN} × ${state.gridDivN} (${state.gridDivN * state.gridDivN}分割)`;
+        document.getElementById('crop-mode-badge').textContent = `${state.gridDivN}×${state.gridDivN} Safe Grid`;
+        recalculateCropBoundingBox();
+      });
+    });
+
+    // Grid Auto-correct toggle
+    document.getElementById('chk-grid-autocorrect').addEventListener('change', (e) => {
+      state.gridAutoCorrect = e.target.checked;
+      recalculateCropBoundingBox();
+    });
+
+    // Download cropped tile with or without guideline strokes
+    function downloadCroppedTile(includeGuidelines) {
+      if (!state.baseImg || !state.cropRect) {
+        showToast('切り出す領域がありません', 'warning');
+        return;
+      }
+      if (!state.isAspectStandard) {
+        showToast('非標準アスペクト比のためダウンロードできません。標準比率に設定してください。', 'warning');
+        return;
+      }
+
+      const { x, y, w, h } = state.cropRect;
+      const cropCanvas = document.createElement('canvas');
+      cropCanvas.width = w;
+      cropCanvas.height = h;
+      const ctx = cropCanvas.getContext('2d');
+
+      // 1. Draw base image crop
+      ctx.drawImage(baseCanvas, x, y, w, h, 0, 0, w, h);
+
+      // 2. Optionally draw guideline strokes
+      if (includeGuidelines) {
+        ctx.drawImage(drawCanvas, x, y, w, h, 0, 0, w, h);
+      }
+
+      // Download file with aspect ratio tag in filename
+      const ratioTag = state.detectedRatioMeta ? state.detectedRatioMeta.label.replace(':', '_') : 'std';
+      const link = document.createElement('a');
+      const filename = includeGuidelines 
+        ? `tile_prompt_${ratioTag}_${w}x${h}.png` 
+        : `tile_clean_${ratioTag}_${w}x${h}.png`;
+      link.download = filename;
+      link.href = cropCanvas.toDataURL('image/png');
+      link.click();
+
+      document.getElementById('step-badge-2').className = 'step-badge px-2.5 py-1 rounded-full font-medium transition-all bg-indigo-600 text-white flex items-center gap-1.5 shadow-sm';
+      showToast(`${filename} (比率 ${state.detectedRatioMeta.label}) をダウンロードしました！`, 'success');
+    }
+
+    document.getElementById('btn-download-with-guide').addEventListener('click', () => downloadCroppedTile(true));
+    document.getElementById('btn-download-clean').addEventListener('click', () => downloadCroppedTile(false));
+
+    // Step 3: Patch image upload with automatic size re-sampling
+    const dropZonePatch = document.getElementById('drop-zone-patch');
+    const patchFileInput = document.getElementById('patch-file-input');
+
+    dropZonePatch.addEventListener('click', () => patchFileInput.click());
+    patchFileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) handlePatchImageFile(e.target.files[0]);
+    });
+
+    dropZonePatch.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZonePatch.classList.add('border-indigo-400', 'bg-indigo-950/40');
+    });
+    dropZonePatch.addEventListener('dragleave', () => {
+      dropZonePatch.classList.remove('border-indigo-400', 'bg-indigo-950/40');
+    });
+    dropZonePatch.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZonePatch.classList.remove('border-indigo-400', 'bg-indigo-950/40');
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handlePatchImageFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    function handlePatchImageFile(file) {
+      if (!state.cropRect) {
+        showToast('先にステップ2で切り出し領域を設定してください', 'warning');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          state.patchImg = img;
+          document.getElementById('blend-controls').classList.remove('opacity-40', 'pointer-events-none');
+          document.getElementById('btn-compare-hold').disabled = false;
+          drawCanvas.style.opacity = '0.35';
+
+          // Aspect ratio verification between patch and crop region
+          const patchRatio = img.width / img.height;
+          const cropRatio = state.cropRect.w / state.cropRect.h;
+          const ratioDiff = Math.abs(patchRatio - cropRatio) / cropRatio;
+          const noteEl = document.getElementById('patch-safety-note');
+
+          if (ratioDiff <= 0.03) {
+            // Aspect ratio matched! Resampling handles resolution differences seamlessly
+            noteEl.className = 'p-2 rounded bg-emerald-950/40 border border-emerald-700/50 text-[10px] text-emerald-200 font-mono';
+            noteEl.innerHTML = `✓ 比率一致 (${img.width}×${img.height}) ➔ ${state.cropRect.w}×${state.cropRect.h}へ高精度自動リサンプリング配置`;
+          } else {
+            // Mismatched aspect ratio warning
+            noteEl.className = 'p-2 rounded bg-amber-950/40 border border-amber-700/50 text-[10px] text-amber-200 font-mono';
+            noteEl.innerHTML = `⚠ 比率差 (${(ratioDiff * 100).toFixed(1)}%): AIが指定外の比率で出力したため、わずかに引き伸ばしが発生します`;
+          }
+
+          updateCompositePatch();
+          document.getElementById('step-badge-3').className = 'step-badge px-2.5 py-1 rounded-full font-medium transition-all bg-emerald-600 text-white flex items-center gap-1.5 shadow-sm';
+          showToast('修正タイルを配置しました！フェザリングを調整してください', 'success');
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Feathered Blending Composite
+    function updateCompositePatch() {
+      if (!state.patchImg || !state.cropRect) return;
+
+      const { x, y, w, h } = state.cropRect;
+      patchCtx.clearRect(0, 0, patchCanvas.width, patchCanvas.height);
+
+      const offscreen = document.createElement('canvas');
+      offscreen.width = w;
+      offscreen.height = h;
+      const offCtx = offscreen.getContext('2d');
+      offCtx.imageSmoothingEnabled = true;
+      offCtx.imageSmoothingQuality = 'high';
+
+      // Automatically re-samples the AI patch to match crop bounding box dimensions
+      offCtx.drawImage(state.patchImg, 0, 0, w, h);
+
+      // Feathering edge mask calculation
+      const radius = state.featherRadius;
+      if (radius > 0) {
+        const maskCanvas = document.createElement('canvas');
+        maskCanvas.width = w;
+        maskCanvas.height = h;
+        const maskCtx = maskCanvas.getContext('2d');
+        
+        const maskImgData = maskCtx.createImageData(w, h);
+        const data = maskImgData.data;
+
+        for (let py = 0; py < h; py++) {
+          for (let px = 0; px < w; px++) {
+            const idx = (py * w + px) * 4;
+            const dist = Math.min(px, py, w - 1 - px, h - 1 - py);
+            let alphaFactor = 1.0;
+            if (dist < radius) {
+              const t = dist / radius;
+              alphaFactor = t * t * (3 - 2 * t); // smoothstep feather
+            }
+            data[idx] = 255;
+            data[idx + 1] = 255;
+            data[idx + 2] = 255;
+            data[idx + 3] = Math.round(alphaFactor * 255);
+          }
+        }
+        maskCtx.putImageData(maskImgData, 0, 0);
+
+        offCtx.globalCompositeOperation = 'destination-in';
+        offCtx.drawImage(maskCanvas, 0, 0);
+      }
+
+      patchCtx.drawImage(offscreen, x, y);
+    }
+
+    // Feathering slider listener
+    const featherSlider = document.getElementById('feather-slider');
+    featherSlider.addEventListener('input', (e) => {
+      state.featherRadius = parseInt(e.target.value);
+      document.getElementById('feather-val').textContent = `${state.featherRadius} px`;
+      updateCompositePatch();
+    });
+
+    // Downsample buttons
+    document.querySelectorAll('.resize-opt-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.resize-opt-btn').forEach(b => {
+          b.className = 'resize-opt-btn py-1.5 px-2 rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-400 text-center font-medium hover:border-zinc-700';
+        });
+        btn.className = 'resize-opt-btn py-1.5 px-2 rounded-lg border border-indigo-500 bg-indigo-950/30 text-indigo-300 text-center font-medium';
+        state.exportScale = parseFloat(btn.dataset.scale);
+      });
+    });
+
+    // Compare original image on long press
+    const compareBtn = document.getElementById('btn-compare-hold');
+    function showOriginal() {
+      patchCanvas.style.opacity = '0';
+      drawCanvas.style.opacity = '0';
+      uiCanvas.style.opacity = '0';
+    }
+    function restoreModified() {
+      patchCanvas.style.opacity = '1';
+      drawCanvas.style.opacity = '0.35';
+      uiCanvas.style.opacity = '1';
+    }
+    compareBtn.addEventListener('mousedown', showOriginal);
+    window.addEventListener('mouseup', restoreModified);
+    compareBtn.addEventListener('touchstart', showOriginal);
+    window.addEventListener('touchend', restoreModified);
+
+    // Final Composite PNG Export
+    document.getElementById('btn-export-composite').addEventListener('click', () => {
+      if (!state.baseImg || !state.patchImg) {
+        showToast('再合成するタイル画像がありません', 'warning');
+        return;
+      }
+
+      const origW = baseCanvas.width;
+      const origH = baseCanvas.height;
+
+      const compCanvas = document.createElement('canvas');
+      compCanvas.width = origW;
+      compCanvas.height = origH;
+      const compCtx = compCanvas.getContext('2d');
+
+      compCtx.drawImage(baseCanvas, 0, 0);
+      compCtx.drawImage(patchCanvas, 0, 0);
+
+      const targetW = Math.round(origW * state.exportScale);
+      const targetH = Math.round(origH * state.exportScale);
+
+      let finalCanvas = compCanvas;
+      if (state.exportScale !== 1.0) {
+        finalCanvas = document.createElement('canvas');
+        finalCanvas.width = targetW;
+        finalCanvas.height = targetH;
+        const finalCtx = finalCanvas.getContext('2d');
+        finalCtx.imageSmoothingEnabled = true;
+        finalCtx.imageSmoothingQuality = 'high';
+        finalCtx.drawImage(compCanvas, 0, 0, targetW, targetH);
+      }
+
+      const link = document.createElement('a');
+      link.download = `composite_result_${targetW}x${targetH}.png`;
+      link.href = finalCanvas.toDataURL('image/png');
+      link.click();
+
+      showToast(`完成画像 (${targetW}×${targetH}) を書き出しました！`, 'success');
+    });
+
+    // Keyboard shortcut for Undo (Ctrl+Z)
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        document.getElementById('btn-undo').click();
+      }
+    });
+  </script>
+</body>
+</html>
